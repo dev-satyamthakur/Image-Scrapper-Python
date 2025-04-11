@@ -7,53 +7,82 @@ from PIL import Image
 from urllib.parse import quote
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service  # Import Service
+from selenium.webdriver.chrome.service import Service
 
-# Enter query for Google search
-query = "dog"
-# Convert the query into URL format
+# Configuration
+query = "whale"
+MINIMUM_SIZE_KB = 4  # 4 KB threshold
+MAX_IMAGES = 10      # Stop after 10 valid images
+
+# Setup paths and encoding
 query_url = quote(query)
-# Specify the desired folder path on the desktop
 folder_name = os.path.join('', query)
+os.makedirs(folder_name, exist_ok=True)
 
-# Create folder if it doesn't exist (no error if exists)
-os.makedirs(folder_name, exist_ok=True)  # Fix for WinError 183
+# Initialize browser
+service = Service(r"C:\Users\Satyam Thakur\Downloads\chromedriver-win64\chromedriver-win64\chromedriver.exe")
+driver = webdriver.Chrome(service=service)
+driver.get(f"https://www.google.com/search?q={query_url}&tbm=isch")
 
-# Initialize Chrome with Service
-service = Service(executable_path=r"C:\Users\Satyam Thakur\Downloads\chromedriver-win64\chromedriver-win64\chromedriver.exe")
-driver = webdriver.Chrome(service=service)  # Pass service as argument
-
-# URL for Google Images search
-url = f"https://www.google.com/search?q={query_url}&tbm=isch"
-driver.get(url)
-
-# Simulate scrolling to load more images
-for _ in range(1):  # Adjust scroll count
+# Scroll to load images
+for _ in range(2):  # Scroll twice to load more initial images
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(2)  # Wait for images to load
+    time.sleep(1.5)
 
-try:
-    # Find all image elements using updated method
-    img_elements = driver.find_elements(By.CSS_SELECTOR, 'img.YQ4gaf')  # Fix deprecated method
-    print(img_elements)
-except Exception as e:
-    print(f"An error occurred: {str(e)}")
+# Find image elements
+img_elements = driver.find_elements(By.CSS_SELECTOR, 'img.YQ4gaf')
+print(f"Found {len(img_elements)} potential images")
 
-# Download and save images
+# Image processing
+saved_count = 0
+
 for i, img in enumerate(img_elements):
-    img_url = img.get_attribute("src")
-    if img_url and img_url.startswith('http'):
-        img_response = requests.get(img_url)
-        img_name = f"{i + 1}.jpg"
-        img_path = os.path.join(folder_name, img_name)
-        with open(img_path, "wb") as img_file:
-            img_file.write(img_response.content)
-    elif img_url and img_url.startswith('data:image/jpeg;base64'):
-        img_data = img_url.split('base64,')[1]
-        img = Image.open(io.BytesIO(base64.b64decode(img_data)))
-        img_name = f"{i + 1}.jpg"
-        img_path = os.path.join(folder_name, img_name)
-        img.save(img_path)
+    if saved_count >= MAX_IMAGES:
+        break
+        
+    try:
+        img_url = img.get_attribute("src")
+        if not img_url:
+            continue
 
-print(f"Images saved to: {folder_name}")
+        # HTTP image handling
+        if img_url.startswith('http'):
+            img_response = requests.get(img_url, timeout=10)
+            content = img_response.content
+            size_kb = len(content) // 1024
+            
+            if size_kb < MINIMUM_SIZE_KB:
+                print(f"Image {i+1}: {size_kb}KB (Skipped)")
+                continue
+                
+        # Base64 image handling
+        elif img_url.startswith('data:image'):
+            img_data = img_url.split('base64,')[1]
+            content = base64.b64decode(img_data)
+            size_kb = len(content) // 1024
+            
+            if size_kb < MINIMUM_SIZE_KB:
+                print(f"Image {i+1}: {size_kb}KB (Skipped)")
+                continue
+                
+        else:
+            continue
+
+        # Save the image
+        img_name = f"image_{saved_count + 1}.jpg"
+        img_path = os.path.join(folder_name, img_name)
+        
+        if img_url.startswith('http'):
+            with open(img_path, "wb") as f:
+                f.write(content)
+        else:
+            Image.open(io.BytesIO(content)).save(img_path)
+            
+        print(f"Saved {img_name} ({size_kb}KB)")
+        saved_count += 1
+
+    except Exception as e:
+        print(f"Error processing image {i+1}: {str(e)}")
+
+print(f"\nSuccessfully saved {saved_count} images over {MINIMUM_SIZE_KB}KB")
 driver.quit()
