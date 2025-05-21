@@ -1,4 +1,4 @@
-# 🖼️ Image Scraper
+# 🖼️ Bio - Guardian : Image Scraper
 
 A modern Python-based image scraper that downloads high-quality images from Google Images using Selenium WebDriver, with support for both headless and standard browser operations.
 
